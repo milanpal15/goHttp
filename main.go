@@ -7,23 +7,17 @@ import (
 	"os"
 )
 
-func main() {
-	file, err := os.Open("messages.txt")
-	if err != nil {
-		log.Fatalf("Failed to open file: %s", err)
-	}
-	defer file.Close()
-
+func worker(file io.ReadCloser, ch chan string) {
+	defer close(ch)
 	buffer := make([]byte, 8)
 	var buf []byte
-
 	for {
 		n, err := file.Read(buffer)
 
 		if n > 0 {
 			for _, b := range buffer[:n] {
 				if b == '\n' {
-					fmt.Printf("read: %s\n", string(buf))
+					ch <- string(buf)
 					buf = buf[:0]
 				} else {
 					buf = append(buf, b)
@@ -34,15 +28,35 @@ func main() {
 		if err == io.EOF {
 			// flush remaining buffer if any
 			if len(buf) > 0 {
-				fmt.Printf("read: %s\n", string(buf))
+				ch <- string(buf)
 			}
-			break
+			return
 		}
 
 		if err != nil {
-			fmt.Println("Error reading File:", err)
+			ch <- err.Error()
 			return
 		}
 	}
 }
 
+func readchannel(file io.ReadCloser) <-chan string {
+
+	ch := make(chan string)
+	// return ch
+	go worker(file, ch)
+	return ch
+}
+
+func main() {
+	file, err := os.Open("messages.txt")
+	if err != nil {
+		log.Fatalf("failed to open file: %s", err)
+	}
+	defer file.Close()
+	out := readchannel(file)
+
+	for line := range out {
+		fmt.Println("read:", line)
+	}
+}
