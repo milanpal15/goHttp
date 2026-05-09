@@ -25,8 +25,12 @@ func parseHeadersLine(h Headers, str string) (err error) {
 			return fmt.Errorf("invalid Header")
 		}
 	}
-
-	h[strings.ToLower(key)] = strings.Trim(value, " ")
+	newvalue, exists := h[strings.ToLower(key)]
+	if exists {
+		h[strings.ToLower(key)] = newvalue + "," + strings.Trim(value, " ")
+	} else {
+		h[strings.ToLower(key)] = strings.Trim(value, " ")
+	}
 	return nil
 }
 
