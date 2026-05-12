@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"myhttp/internal/headers"
+	"strconv"
 	"strings"
 )
 
@@ -11,6 +12,7 @@ type Request struct {
 	RequestLine RequestLine
 	Headers     headers.Headers
 	state       string
+	Body        []byte
 }
 
 type RequestLine struct {
@@ -66,6 +68,14 @@ func (r *Request) parse(data []byte) error {
 	return nil
 }
 
+func parseInt(value string) (val int, err error) {
+	intConvValue, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return int(intConvValue), nil
+}
+
 func (r *Request) parseSingle(data []byte) (int, error) {
 	if r.state == "initialized" {
 		n, parsedData, err := parseRequestLine(data)
@@ -79,12 +89,34 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 	if r.state == "parsingHeaders" {
 		n, isCompleted, err := r.Headers.Parse(data)
 		if isCompleted {
-			r.state = "done"
+			r.state = "parsingBody"
 		}
 		if err != nil {
 			return 0, err
 		}
 		return n, nil
+	}
+	if r.state == "parsingBody" {
+		contentLength := r.Headers.Get("Content-Length")
+		if contentLength == "" || contentLength == "0" {
+			return 0, nil
+		}
+		parseStrInt, err := parseInt(contentLength)
+
+		if err != nil {
+			return 0, err
+		}
+		r.Body = append(r.Body, data...)
+		if len(r.Body) < parseStrInt {
+			return len(data), nil
+		}
+		if len(r.Body) == parseStrInt {
+			r.state = "done"
+			return len(data), nil
+		}
+		if len(r.Body) > parseStrInt {
+			return len(data), fmt.Errorf("body length is greater then provided content length header value")
+		}
 	}
 	return 0, nil
 }
@@ -115,6 +147,10 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	err := RequestObj.parse(output)
 	if err != nil {
 		return &RequestObj, err
+	}
+	contentLength, err := parseInt(RequestObj.Headers.Get("Content-Length"))
+	if contentLength > 0 && len(RequestObj.Body) < contentLength {
+		return &RequestObj, fmt.Errorf("request body is shorter then content length")
 	}
 	return &RequestObj, nil
 }

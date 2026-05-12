@@ -12,6 +12,11 @@ func NewHeaders() Headers {
 	return make(Headers)
 }
 
+func (h Headers) Get(key string) (value string) {
+	mappedValue := h[strings.ToLower(key)]
+	return mappedValue
+}
+
 func parseHeadersLine(h Headers, str string) (err error) {
 
 	firstColonIndex := strings.Index(str, ":")
