@@ -2,6 +2,8 @@ package server
 
 import (
 	"fmt"
+	"myhttp/internal/headers"
+	"myhttp/internal/request"
 	"myhttp/internal/response"
 	"net"
 	"sync/atomic"
@@ -10,22 +12,36 @@ import (
 type Server struct {
 	listener net.Listener
 	closed   atomic.Bool
+	handler  Handler
 }
 
-func HandleError(err error) {
+const port = 42069
 
-}
+type Handler func(w *response.Response, req *request.Request)
 
-func Serve(port int) (*Server, error) {
+func Serve(handler Handler) (*Server, error) {
 	newServer := Server{}
 	listen, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return nil, err
 	}
 	newServer.listener = listen
+	newServer.handler = handler
 	go newServer.listen()
 	return &newServer, nil
+
 }
+
+// func Serve(port int) (*Server, error) {
+// 	newSer ver := Server{}
+// 	listen, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	newServer.listener = listen
+// 	go newServer.listen()
+// 	return &newServer, nil
+// }
 
 func (s *Server) Close() error {
 	if !s.closed.Load() {
@@ -56,6 +72,14 @@ func (s *Server) listen() {
 }
 
 func (s *Server) handle(conn net.Conn) {
+	handleRes := response.Response{}
+	handleRes.Writer = conn
+	req, err := request.RequestFromReader(conn)
+	if err != nil {
+		fmt.Printf("%s", err)
+	}
+	handleRes.Headers = headers.NewHeaders()
 	defer conn.Close()
-	response.WriteResp(conn)
+	s.handler(&handleRes, req)
+	response.HandleRes(&handleRes, handleRes.HandlerRes)
 }
